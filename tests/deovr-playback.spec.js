@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { searchPublicVideo, getPlayerTimes, waitForClockToAdvance, observeFullscreen } from './helpers.js';
 
-async function verifyPlaybackContinuesAfterSeek(page, testInfo) {
+async function verifyPlaybackContinuesAfterSeek(page) {
   const { current } = await getPlayerTimes(page);
-  await revealPlayerControls(page, testInfo);
+  await revealPlayerControls(page);
 
   // Allow bounded buffering on every platform, without sending Play.
   await waitForClockToAdvance(page, current, 60_000);
@@ -16,7 +16,7 @@ function getPlayPauseControl(page, iconName) {
   return page.getByTestId('play-pause-btn').and(page.getByTitle(title, { exact: true }));
 }
 
-async function revealPlayerControls(page, testInfo) {
+async function revealPlayerControls(page) {
   const overlay = page.getByTestId('player-overlay');
   const box = await overlay.boundingBox();
   if (!box) throw new Error('The player overlay is not visible');
@@ -24,8 +24,8 @@ async function revealPlayerControls(page, testInfo) {
   await expect(overlay).toHaveAttribute('data-ui-hidden', 'false');
 }
 
-async function seekTo(page, testInfo, fraction) {
-  await revealPlayerControls(page, testInfo);
+async function seekTo(page, fraction) {
+  await revealPlayerControls(page);
   const timeline = page.getByTestId('timeline');
   await expect(timeline).toBeVisible();
   const box = await timeline.boundingBox();
@@ -33,8 +33,8 @@ async function seekTo(page, testInfo, fraction) {
   await timeline.click({ position: { x: Math.round(box.width * fraction), y: Math.round(box.height / 2) } });
 }
 
-async function openQualityMenu(page, testInfo) {
-  await revealPlayerControls(page, testInfo);
+async function openQualityMenu(page) {
+  await revealPlayerControls(page);
 
   await page.getByTestId('quality-btn').click();
   const qualityMenu = page.getByTestId('quality-option').first().locator('xpath=ancestor::section[1]');
@@ -66,7 +66,7 @@ test.describe('DeoVR public video playback', () => {
       await expect(page.getByTestId('bottom-controls')).toBeVisible();
       const { current } = await getPlayerTimes(page);
       await waitForClockToAdvance(page, current);
-      await revealPlayerControls(page, testInfo);
+      await revealPlayerControls(page);
     });
   });
 
@@ -79,9 +79,9 @@ test.describe('DeoVR public video playback', () => {
     });
   });
 
-  test('pause and resume update the playback clock', async ({ page }, testInfo) => {
+  test('pause and resume update the playback clock', async ({ page }) => {
     await test.step('Pause and verify the clock remains still', async () => {
-      await revealPlayerControls(page, testInfo);
+      await revealPlayerControls(page);
       const pauseButton = getPlayPauseControl(page, 'pause');
       await expect(pauseButton).toBeVisible();
       await pauseButton.click();
@@ -92,23 +92,23 @@ test.describe('DeoVR public video playback', () => {
       // The UI clock has one-second precision; wait through one tick to prove it stays paused.
       await page.waitForTimeout(1_200);
       expect((await getPlayerTimes(page)).current).toBeLessThanOrEqual(pausedAt + 1);
-      await revealPlayerControls(page, testInfo);
+      await revealPlayerControls(page);
     });
 
     await test.step('Resume and verify the clock advances', async () => {
       const pausedAt = (await getPlayerTimes(page)).current;
-      await revealPlayerControls(page, testInfo);
+      await revealPlayerControls(page);
       await getPlayPauseControl(page, 'play').click();
       await waitForClockToAdvance(page, pausedAt);
-      await revealPlayerControls(page, testInfo);
+      await revealPlayerControls(page);
       await expect(getPlayPauseControl(page, 'pause')).toBeVisible();
     });
   });
 
-  test('seeking forward keeps playback active and lands within five percent of the target', async ({ page }, testInfo) => {
+  test('seeking forward keeps playback active and lands within five percent of the target', async ({ page }) => {
     await test.step('Seek forward to approximately 72 percent', async () => {
       const duration = (await getPlayerTimes(page)).duration;
-      await seekTo(page, testInfo, 0.72);
+      await seekTo(page, 0.72);
       const target = duration * 0.72;
       const tolerance = duration * 0.05;
       await expect.poll(async () => {
@@ -118,14 +118,14 @@ test.describe('DeoVR public video playback', () => {
     });
 
     await test.step('Verify playback continues without pressing Play', async () => {
-      await verifyPlaybackContinuesAfterSeek(page, testInfo);
+      await verifyPlaybackContinuesAfterSeek(page);
     });
   });
 
-  test('seeking backward keeps playback active and lands within five percent of the target', async ({ page }, testInfo) => {
+  test('seeking backward keeps playback active and lands within five percent of the target', async ({ page }) => {
     await test.step('Seek backward to approximately 24 percent', async () => {
       const duration = (await getPlayerTimes(page)).duration;
-      await seekTo(page, testInfo, 0.72);
+      await seekTo(page, 0.72);
       const forwardTarget = duration * 0.72;
       const tolerance = duration * 0.05;
       await expect.poll(async () => {
@@ -133,7 +133,7 @@ test.describe('DeoVR public video playback', () => {
         return Math.abs(current - forwardTarget);
       }, { timeout: 20_000 }).toBeLessThanOrEqual(tolerance);
 
-      await seekTo(page, testInfo, 0.24);
+      await seekTo(page, 0.24);
       const backwardTarget = duration * 0.24;
       await expect.poll(async () => {
         const { current } = await getPlayerTimes(page);
@@ -142,15 +142,15 @@ test.describe('DeoVR public video playback', () => {
     });
 
     await test.step('Verify playback continues without pressing Play', async () => {
-      await verifyPlaybackContinuesAfterSeek(page, testInfo);
+      await verifyPlaybackContinuesAfterSeek(page);
     });
   });
 
   test('changes quality without resetting position or stopping playback', async ({ page }, testInfo) => {
-    await test.step('Require an alternate rendition for this quality-change test', async () => {
+    await test.step('Change quality and verify selection, position, and continued playback', async () => {
       const beforeQualityChange = (await getPlayerTimes(page)).current;
       const changeStarted = Date.now();
-      const qualityOptions = await openQualityMenu(page, testInfo);
+      const qualityOptions = await openQualityMenu(page);
       await expect(qualityOptions.first()).toBeVisible();
       const optionCount = await qualityOptions.count();
       await testInfo.attach('quality-options', {
@@ -162,14 +162,13 @@ test.describe('DeoVR public video playback', () => {
         `The selected free video exposes ${optionCount} quality option(s); an alternate rendition is required.`,
       );
 
-
       const selectedOption = qualityOptions.filter({ has: page.locator('svg[name="check"]') });
       await expect(selectedOption).toHaveCount(1);
       const alternateOption = qualityOptions.filter({ hasNot: page.locator('svg[name="check"]') }).first();
       const alternateLabel = (await alternateOption.innerText()).trim();
       await alternateOption.getByRole('button').click();
 
-      const reopenedOptions = await openQualityMenu(page, testInfo);
+      const reopenedOptions = await openQualityMenu(page);
       const newSelectedOption = reopenedOptions.filter({ has: page.locator('svg[name="check"]') });
       await expect(newSelectedOption).toHaveText(alternateLabel);
 
@@ -178,10 +177,9 @@ test.describe('DeoVR public video playback', () => {
       const afterQualityChange = (await getPlayerTimes(page)).current;
       expect(afterQualityChange).toBeGreaterThanOrEqual(beforeQualityChange - 2);
       expect(afterQualityChange).toBeLessThanOrEqual(beforeQualityChange + (Date.now() - changeStarted) / 1000 + 2);
-      await revealPlayerControls(page, testInfo);
+      await revealPlayerControls(page);
       await expect(getPlayPauseControl(page, 'pause')).toBeVisible();
       await waitForClockToAdvance(page, afterQualityChange);
-
     });
   });
 

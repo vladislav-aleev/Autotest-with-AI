@@ -2,7 +2,7 @@
 
 [![Playwright E2E](https://github.com/vladislav-aleev/Autotest-with-AI/actions/workflows/playwright.yml/badge.svg)](https://github.com/vladislav-aleev/Autotest-with-AI/actions/workflows/playwright.yml)
 
-**Green CI means no unexpected failures, not complete coverage. Quality and fullscreen can be skipped for unmet prerequisites. The revised suite contains no XFAIL rules.** Each job publishes actual passed / failed / skipped / XFAIL counts and reasons in its summary and `reports/summary.json` artifact.
+Green CI means no unexpected failures, not full coverage — see the results table below.
 
 ## User path and rationale
 
@@ -24,6 +24,8 @@ npm run report
 
 Linux CI installs system dependencies with `npx playwright install --with-deps chromium`. For one project use `npx playwright test --project="Desktop Chrome"` or `--project="Pixel 7"`.
 
+The configuration uses `channel: 'chromium'` to run full Chromium in both headed and modern headless mode. The CI table below identifies the revision tested; the earlier default headless-shell results do not establish coverage for this configuration.
+
 ## Scenarios
 
 Preconditions: DeoVR/search/CDN are reachable; search returns a free, playable video. Each test starts in a fresh context and independently searches. Mobile coverage is a search-to-playback smoke test; the six player scenarios run on desktop Chromium.
@@ -41,7 +43,7 @@ Shared search and validated `mm:ss` / `hh:mm:ss` parsing live in `tests/helpers.
 
 ## Verified environments and limitations
 
-All four jobs passed in [CI run 42512435413](https://github.com/vladislav-aleev/Autotest-with-AI/actions/runs/42512435413) for commit `70ef1ed` on November 8, 2026. Counts below come from each job's `E2E results` annotation, rather than its green status alone.
+The baseline before switching to full Chromium passed all four jobs in [CI run 42512435413](https://github.com/vladislav-aleev/Autotest-with-AI/actions/runs/42512435413) for commit `70ef1ed` on November 8, 2026. Counts below come from each job's `E2E results` annotation, rather than its green status alone.
 
 | Verified environment | Passed | Failed | Skipped | XFAIL |
 | --- | --- | --- | --- | --- |
@@ -58,7 +60,7 @@ Earlier Windows failures showed a reached seek target followed by a stalled cloc
 
 ## AI workflow
 
-Codex generated and revised the project. The candidate supplied the scenario, reviewed assertions and CI logs, and challenged misleading green results. Additional review was supplied in the conversation; the identity of a second AI tool was not provided, so this project does not claim a verified run with that tool or manual authorship of AI-written patches.
+I used Codex to generate and revise the project, and Claude as a second reviewer of the result. I chose the scenario, decided which findings to accept, and checked the fixes against CI runs. Codex implemented the code changes; I reviewed the assertions and questioned results that were green without exercising the intended behavior.
 
 Key prompts:
 
@@ -67,4 +69,4 @@ Key prompts:
 - “Do not press Play after seeking. Capture a fresh timestamp after fullscreen exit, validate hh:mm:ss, and check seek positions within ±5%.”
 - “Remove runner-specific XFAIL rules, share helpers, use skip for missing quality prerequisites, and verify fullscreen with a headed macOS run.”
 
-AI helped inspect controls, generate fixtures and interpret output. Review caught a stale final timestamp, automatic Play recovery that hid failures, an invalid parser, a Play/Pause locator that ignored state, broad quality selectors, swallowed Escape errors, and unjustified Windows XFAIL logic. These were corrected in code. The earlier claim that an absent Pause button proved a product bug was withdrawn; the cause remains under investigation.
+AI helped me inspect controls, generate fixtures, and interpret output. During review, I accepted findings about a stale final timestamp, automatic Play recovery that hid failures, an invalid parser, a Play/Pause locator that ignored state, broad quality selectors, swallowed Escape errors, and unjustified Windows XFAIL logic. I asked Codex to correct these issues and checked the resulting reports. I also rejected the conclusion that an absent Pause button alone proved a product bug: the original stall's cause remains unconfirmed.

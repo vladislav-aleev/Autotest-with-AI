@@ -10,6 +10,8 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   reporter: [['list'], ['html', { open: 'never' }], ['./tests/summary-reporter.js'], ...(process.env.CI ? [['github']] : [])],
   use: {
+    // Use full Chromium for both headed and modern headless runs.
+    channel: 'chromium',
     baseURL: 'https://deovr.com',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',

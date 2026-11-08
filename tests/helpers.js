@@ -1,7 +1,9 @@
 import { expect } from '@playwright/test';
+
 export const HOME_URL = 'https://deovr.com/';
 const SEARCH_TERM = 'Hanoi Train Street';
 const SEARCH_RESULTS = 'main article';
+
 export function parseMediaTime(value) {
   const parts = value.trim().split(':');
   if (parts.length !== 2 && parts.length !== 3) {
@@ -38,41 +40,39 @@ export async function waitForClockToAdvance(page, previousTime, timeout = 20_000
     .toBeGreaterThan(previousTime);
 }
 
-
 export async function searchPublicVideo(page, testInfo, mobile = false) {
-      await page.goto(HOME_URL, { waitUntil: 'domcontentloaded' });
-      await expect(page.getByRole('heading', { name: 'VR Videos' })).toBeVisible();
+  await page.goto(HOME_URL, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'VR Videos' })).toBeVisible();
 
-      if (mobile) {
-        await page.getByRole('button', { name: 'Search', exact: true }).click();
-      }
-      const searchInput = page.getByPlaceholder("I'm looking for...");
-      await searchInput.fill(SEARCH_TERM);
-      await searchInput.press('Enter');
-      await expect(page).toHaveURL(/\/search\?q=/);
-      await expect(page.getByRole('heading', { name: 'Search results' })).toBeVisible();
+  if (mobile) {
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
+  }
+  const searchInput = page.getByPlaceholder("I'm looking for...");
+  await searchInput.fill(SEARCH_TERM);
+  await searchInput.press('Enter');
+  await expect(page).toHaveURL(/\/search\?q=/);
+  await expect(page.getByRole('heading', { name: 'Search results' })).toBeVisible();
 
-      const freeResults = page.locator(SEARCH_RESULTS).filter({
-        hasNot: page.locator('a[href*="/videos/premium"]'),
-      });
-      const freeResult = freeResults.first();
-      await expect(freeResult).toBeVisible();
-      await expect(freeResult.locator('a[href*="/videos/premium"]')).toHaveCount(0);
+  const freeResults = page.locator(SEARCH_RESULTS).filter({
+    hasNot: page.locator('a[href*="/videos/premium"]'),
+  });
+  const freeResult = freeResults.first();
+  await expect(freeResult).toBeVisible();
+  await expect(freeResult.locator('a[href*="/videos/premium"]')).toHaveCount(0);
 
-      const videoLink = freeResult.locator('h3 a');
-      const videoHref = await videoLink.getAttribute('href');
-      const videoTitle = await videoLink.innerText();
-      expect(videoHref, 'A non-Premium search result must link to a video page').toBeTruthy();
-      expect(videoTitle.trim()).not.toBe('');
+  const videoLink = freeResult.locator('h3 a');
+  const videoHref = await videoLink.getAttribute('href');
+  const videoTitle = await videoLink.innerText();
+  expect(videoHref, 'A non-Premium search result must link to a video page').toBeTruthy();
+  expect(videoTitle.trim()).not.toBe('');
 
-      await videoLink.click();
-      await expect(page).toHaveURL(new URL(videoHref, HOME_URL).href);
-      await expect(page.getByRole('heading', { level: 1 })).toHaveText(videoTitle);
-      testInfo.annotations.push({
-        type: 'selected-video',
-        description: `${videoTitle.trim()} — selected from search results without a Premium marker.`,
-      });
-
+  await videoLink.click();
+  await expect(page).toHaveURL(new URL(videoHref, HOME_URL).href);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(videoTitle);
+  testInfo.annotations.push({
+    type: 'selected-video',
+    description: `${videoTitle.trim()} — selected from search results without a Premium marker.`,
+  });
 }
 
 // Observe the native promise without changing its result, timing, or user activation.
