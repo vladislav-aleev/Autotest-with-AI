@@ -98,14 +98,28 @@ The live search currently returns a free video with only one `1080p` rendition i
 
 **Tool used:** OpenAI Codex in the Codex desktop app. Playwright Test was used for the browser automation.
 
-**Key prompts (English translations of prompts I actually gave in this conversation):**
+**Key prompts:**
 
-1. “Write a stable end-to-end autotest using Playwright for this checklist. Include the complete project setup and instructions in the README for running it.”
-2. “Replace the hardcoded URL with a search for a video that is not in the Premium subscription. Start from the homepage, find a video through search, verify the video page opens and that it is not Premium, then continue with the remaining checks.”
-3. “Fix the logical errors in the test and improve its reliability and structure. Correct the final playback check, time parser, quality-change position check, and fullscreen-exit check. Add the search step, real prompts in English, and what the candidate caught during review.”
+1. “Read this DeoVR take-home assignment and recommend the end-to-end flow that would best demonstrate my QA skills. Explain why you chose it.”
+2. “Write a stable end-to-end autotest using Playwright for this checklist. Set up the complete project and add README instructions for installing dependencies and running the test.”
+3. “Replace the hard-coded video URL with a search flow. Start at https://deovr.com/, search for a video that is not Premium, verify that the result opens the video page and is not Premium, and then run the player checks.”
+4. “Review the test as a picky QA engineer. Check whether each assertion proves the expected behavior, and identify logical errors, fragile locators, unreliable waits, missing scenario details, and mismatches between the test and README.”
+5. “Fix the issues found in review: capture a fresh playback-time baseline immediately after exiting fullscreen; do not press Play after seeking, so a pause-after-seek defect remains visible; parse both mm:ss and hh:mm:ss; assert seek positions within ±5% of the target; require an alternate quality and report an explicit expected failure when only one is available; scope quality locators to the menu and close it with its control, then assert it is closed. Split the suite into independent tests with named steps, add a Pixel 7 mobile smoke test, and keep the README accurate.”
+6. “Make fullscreen coverage portable across visible Playwright Chromium on Windows, macOS, and Linux. Always assert that the control changes from Enter Fullscreen to Exit Fullscreen and back. Check the real browser fullscreen state only when the browser grants it, and add an explicit annotation when it is unsupported or denied. Add a GitHub Actions matrix for all three operating systems and document which OS was tested locally.”
 
 **What the AI did well:** Codex inspected the live DeoVR page, found that the player uses a canvas instead of a native video element, and identified the visible clock and player test IDs. It generated the Playwright project, ran it against the real site, and used failure output to adjust the search and player interactions.
 
-**What I caught during review:** The original final clock check compared against a timestamp captured before quality and fullscreen actions, so it did not prove playback after fullscreen exit. The test also pressed Play after a seek and could hide a pause-after-seek defect; the clock parser mishandled durations longer than an hour; the quality step could pass with only one option; and the first quality selectors searched the whole page. I also found an Escape handler whose errors were swallowed, and that the README claimed a page-title check while the code checked the heading. I asked Codex to correct these issues and checked the resulting assertions against the live page.
+**What I caught and had corrected during review:**
 
-**Known live-site result:** The current free search result exposes only one quality, so the strict quality test reports a failure as intended. This finding comes from checking the actual quality menu, not from assuming a failed test is a passing result.
+- The final playback assertion reused a timestamp captured before quality and fullscreen actions. I required a new baseline immediately after fullscreen exit and an assertion that the clock advances from it.
+- The test pressed Play after seeking, which could hide a pause-after-seek defect. I removed that recovery action and made continued playback an assertion.
+- The time parser treated a value such as `1:02:03` as 62 seconds. I required support for both `mm:ss` and `hh:mm:ss` and validation of the displayed duration.
+- The seek check accepted positions far from the target. I replaced it with an absolute ±5% tolerance.
+- The quality step could pass without changing quality, and its locators were too broad. I made an alternate rendition mandatory, report XFAIL when only one is available, and scoped the selector to the quality menu.
+- The test swallowed Escape errors even though Escape did not reliably close the menu. I changed it to close the menu with its control and verify that it disappears.
+- The original suite grouped too many actions together, and the README claimed a page-title check while the code checked the heading. I split the checks into independent tests with named steps and aligned the documentation with the actual assertion.
+- Fullscreen behavior depends on browser and operating-system support. I made the UI state change mandatory, while recording whether the browser granted real fullscreen.
+
+I checked the revised assertions against DeoVR and used the Playwright reports and traces to investigate failures.
+
+**Known live-site result:** The current free search result exposes only one quality, so the quality scenario is reported as an expected failure (XFAIL). This finding comes from checking the actual quality menu, not from assuming that an unavailable quality change passed.
