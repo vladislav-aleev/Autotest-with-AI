@@ -45,6 +45,7 @@ Each desktop player test independently searches from the homepage, opens the fir
 - Quality options are located inside the quality menu. The test does not pass when no alternative rendition exists.
 - Fullscreen UI state is required on all platforms. The browser's real fullscreen API is recorded separately because a browser or operating system may deny the request.
 - The full player-control suite runs in desktop Chromium. Pixel 7 emulation checks the mobile search-to-playback smoke path; mobile player controls use a different layout and are not represented as covered by the desktop-control tests. GitHub Actions runs both projects on Windows, macOS, and Linux.
+- CI retries a failed test once because playback depends on DeoVR's live video CDN. Playwright reports a test that passes only on retry as flaky; repeated failures still fail the job.
 
 ## Requirements
 
