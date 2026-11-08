@@ -43,8 +43,9 @@ async function waitForClockToAdvance(page, previousTime) {
 }
 
 function getPlayPauseControl(page, iconName) {
-  const desktopControl = page.getByTestId('play-pause-btn');
-  const mobileControl = page.locator(`${PLAYER_OVERLAY} button:has(svg[name="${iconName}"])`);
+  const title = iconName === 'pause' ? 'Pause' : 'Play';
+  const desktopControl = page.getByTestId('play-pause-btn').and(page.getByTitle(title));
+  const mobileControl = page.locator(`main button:has(svg[name="${iconName}"])`);
   return desktopControl.or(mobileControl);
 }
 

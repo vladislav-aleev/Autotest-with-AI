@@ -4,8 +4,7 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
-  // DeoVR streams from a live third-party CDN; one retry in CI exposes transient flakes in reports.
-  retries: process.env.CI ? 1 : 0,
+  retries: 0,
   workers: 1,
   timeout: 120_000,
   expect: { timeout: 10_000 },

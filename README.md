@@ -45,7 +45,6 @@ Each desktop player test independently searches from the homepage, opens the fir
 - Quality options are located inside the quality menu. The test does not pass when no alternative rendition exists.
 - Fullscreen UI state is required on all platforms. The browser's real fullscreen API is recorded separately because a browser or operating system may deny the request.
 - The full player-control suite runs in desktop Chromium. Pixel 7 emulation checks the mobile search-to-playback smoke path; mobile player controls use a different layout and are not represented as covered by the desktop-control tests. GitHub Actions runs both projects on Windows, macOS, and Linux.
-- CI retries a failed test once because playback depends on DeoVR's live video CDN. Playwright reports a test that passes only on retry as flaky; repeated failures still fail the job.
 
 ## Requirements
 
@@ -114,6 +113,7 @@ The live search currently returns a free video with only one `1080p` rendition i
 
 - The final playback assertion reused a timestamp captured before quality and fullscreen actions. I required a new baseline immediately after fullscreen exit and an assertion that the clock advances from it.
 - The test pressed Play after seeking, which could hide a pause-after-seek defect. I removed that recovery action and made continued playback an assertion.
+- The desktop Play/Pause locator matched the control regardless of its state, so a visibility check could not prove playback was active. I changed it to require the button title `Pause` and kept the playback-clock assertion.
 - The time parser treated a value such as `1:02:03` as 62 seconds. I required support for both `mm:ss` and `hh:mm:ss` and validation of the displayed duration.
 - The seek check accepted positions far from the target. I replaced it with an absolute ±5% tolerance.
 - The quality step could pass without changing quality, and its locators were too broad. I made an alternate rendition mandatory, report XFAIL when only one is available, and scoped the selector to the quality menu.
@@ -123,4 +123,4 @@ The live search currently returns a free video with only one `1080p` rendition i
 
 I checked the revised assertions against DeoVR and used the Playwright reports and traces to investigate failures.
 
-**Known live-site result:** The current free search result exposes only one quality, so the quality scenario is reported as an expected failure (XFAIL). This finding comes from checking the actual quality menu, not from assuming that an unavailable quality change passed.
+**Known live-site result:** The current free search result exposes only one quality, so the quality scenario is reported as an expected failure (XFAIL). Windows GitHub Actions logs also show that the seek position reaches its target but the displayed playback clock remains unchanged for 20 seconds afterward. The test reports this as a failure because it cannot confirm continued playback; the log alone does not distinguish a player pause from prolonged buffering. This finding comes from checking the actual quality menu and playback clock, not from assuming that an unavailable quality change passed.
