@@ -24,7 +24,7 @@ npm run report
 
 Linux CI installs system dependencies with `npx playwright install --with-deps chromium`. For one project use `npx playwright test --project="Desktop Chrome"` or `--project="Pixel 7"`.
 
-The configuration uses `channel: 'chromium'` to run full Chromium in both headed and modern headless mode. The CI table below identifies the revision tested; the earlier default headless-shell results do not establish coverage for this configuration.
+The configuration uses `channel: 'chromium'` to run full Chromium in both headed and modern headless mode. Quality switching passed with ordinary `npm test` on macOS CI, but Windows and Linux CI still exposed only one quality and skipped that scenario. To exercise quality switching in a visible browser, run `npm run test:headed`; this is verified on macOS. The scenario still requires at least two available qualities.
 
 ## Scenarios
 
@@ -43,18 +43,18 @@ Shared search and validated `mm:ss` / `hh:mm:ss` parsing live in `tests/helpers.
 
 ## Verified environments and limitations
 
-The baseline before switching to full Chromium passed all four jobs in [CI run 42512435413](https://github.com/vladislav-aleev/Autotest-with-AI/actions/runs/42512435413) for commit `70ef1ed` on November 8, 2026. Counts below come from each job's `E2E results` annotation, rather than its green status alone.
+All four jobs passed in [CI run 42519126889](https://github.com/vladislav-aleev/Autotest-with-AI/actions/runs/42519126889) for commit `c844846` on November 8, 2026. Each job publishes actual counts and reasons in its `E2E results` annotation and `reports/summary.json` artifact.
 
 | Verified environment | Passed | Failed | Skipped | XFAIL |
 | --- | --- | --- | --- | --- |
 | Windows CI, headless | 6 | 0 | 1: quality | 0 |
-| macOS CI, headless | 6 | 0 | 1: quality | 0 |
+| macOS CI, headless | 7 | 0 | 0 | 0 |
 | Ubuntu CI, headless | 6 | 0 | 1: quality | 0 |
 | macOS CI, headed | 7 | 0 | 0 | 0 |
 
-Local Windows 11 validation also finished with 6 passed, 1 quality skip, and no failures or XFAIL. The hosted macOS job executed `npm run test:headed`: the browser granted real fullscreen, enter/exit assertions passed, and quality switching passed. The predicted fullscreen denial was not reproduced there; this does not establish compatibility with every interactive Mac's permissions or window-manager configuration. A genuine browser rejection is reported as a skip after checking that the Enter button remains and playback continues.
+Real fullscreen was granted and its enter/exit assertions passed in all four jobs, including `npm run test:headed` on hosted macOS. This does not establish compatibility with every interactive Mac's permissions or window-manager configuration. A genuine browser rejection is reported as a skip after checking that the Enter button remains and playback continues. Local Windows validation of the new full-Chromium configuration was blocked at browser startup by `spawn UNKNOWN`, even after reinstalling Chromium; the Windows result above comes from CI.
 
-For the same free video (`72jjd1`), all three headless jobs exposed only 1080p; headed macOS exposed 1080p, 2160p, 2880p, 3840p, and 4096p. Their desktop user-agent strings were identical. The difference therefore correlates with browser mode, not simply OS or subscription status. Playwright uses separate Chromium builds for [default headless and headed operation](https://playwright.dev/docs/browsers#chromium-headless-shell); the exact codec or site-side selection mechanism is unconfirmed. Quality attachments preserve the URL, options, and user agent. Missing alternatives are skipped as unmet test-data prerequisites, never XFAIL.
+With the [previous default headless shell](https://github.com/vladislav-aleev/Autotest-with-AI/actions/runs/42512435413), all three headless jobs exposed only 1080p for the same free video (`72jjd1`). Switching to [full Chromium's modern headless mode](https://playwright.dev/docs/browsers#chromium-new-headless-mode) exposed five qualities on macOS: 1080p, 2160p, 2880p, 3840p, and 4096p, matching its headed run. Windows and Linux still exposed only 1080p. All desktop user-agent strings were identical; changing the browser build helped on macOS but did not eliminate environment differences. The exact codec or site-side selection mechanism is unconfirmed. Quality attachments preserve the URL, options, and user agent; missing alternatives are skipped as unmet prerequisites.
 
 Earlier Windows failures showed a reached seek target followed by a stalled clock. With the same 60-second recovery allowance on every OS, both seek tests passed in all four jobs without pressing Play. This is consistent with a transient stall but does not prove buffering was its cause. There is no Windows exception or suppressed product defect; a stall beyond the allowance fails and retains diagnostics.
 
@@ -68,5 +68,6 @@ Key prompts:
 - “Start from the homepage, find a video through search, verify the video page opens and that it is not Premium, then continue with the remaining checks.”
 - “Do not press Play after seeking. Capture a fresh timestamp after fullscreen exit, validate hh:mm:ss, and check seek positions within ±5%.”
 - “Remove runner-specific XFAIL rules, share helpers, use skip for missing quality prerequisites, and verify fullscreen with a headed macOS run.”
+- “Try channel: 'chromium' so Playwright uses full Chromium instead of the headless shell. Check whether quality options appear; if not, explain the headed command in the Run section.”
 
 AI helped me inspect controls, generate fixtures, and interpret output. During review, I accepted findings about a stale final timestamp, automatic Play recovery that hid failures, an invalid parser, a Play/Pause locator that ignored state, broad quality selectors, swallowed Escape errors, and unjustified Windows XFAIL logic. I asked Codex to correct these issues and checked the resulting reports. I also rejected the conclusion that an absent Pause button alone proved a product bug: the original stall's cause remains unconfirmed.
