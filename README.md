@@ -56,7 +56,7 @@ Shared search and validated `mm:ss` / `hh:mm:ss` parsing live in `tests/helpers.
 
 ## Verified environments and limitations
 
-The earlier default-browser configuration passed [CI run 42512435413](https://github.com/vladislav-aleev/Autotest-with-AI/actions/runs/42512435413) for commit `70ef1ed` on November 8, 2026. This is a historical baseline, not a fresh result for the current revision. Each job publishes actual counts and reasons in its `E2E results` annotation and `reports/summary.json` artifact.
+All four jobs passed in [CI run 42532028127](https://github.com/vladislav-aleev/Autotest-with-AI/actions/runs/42532028127) for commit `4b7ff25` on November 9, 2026 (Europe/Moscow). Each job publishes actual counts and reasons in its `E2E results` annotation and `reports/summary.json` artifact. Local Windows 11 validation also finished with 6 passed, 1 quality skip, and no failures or XFAIL.
 
 | Verified environment | Passed | Failed | Skipped | XFAIL |
 | --- | --- | --- | --- | --- |
