@@ -41,20 +41,20 @@ Shared search and validated `mm:ss` / `hh:mm:ss` parsing live in `tests/helpers.
 
 ## Verified environments and limitations
 
-The previous [CI run](https://github.com/vladislav-aleev/Autotest-with-AI/actions/runs/42435526512) succeeded on Windows, macOS, and Ubuntu but allowed XFAIL. Job status alone does not reveal its exact pass/XFAIL counts; those counts are not reconstructed as evidence.
+All four jobs passed in [CI run 42512435413](https://github.com/vladislav-aleev/Autotest-with-AI/actions/runs/42512435413) for commit `70ef1ed` on November 8, 2026. Counts below come from each job's `E2E results` annotation, rather than its green status alone.
 
-| Current revision | Passed | Failed | Skipped | XFAIL |
+| Verified environment | Passed | Failed | Skipped | XFAIL |
 | --- | --- | --- | --- | --- |
-| Windows CI, headless | Pending | — | — | 0 by design |
-| macOS CI, headless | Pending | — | — | 0 by design |
-| Ubuntu CI, headless | Pending | — | — | 0 by design |
-| macOS CI, headed | Pending | — | — | 0 by design |
+| Windows CI, headless | 6 | 0 | 1: quality | 0 |
+| macOS CI, headless | 6 | 0 | 1: quality | 0 |
+| Ubuntu CI, headless | 6 | 0 | 1: quality | 0 |
+| macOS CI, headed | 7 | 0 | 0 | 0 |
 
-Local runs use Windows 11. The additional macOS job executes `npm run test:headed` on a hosted Mac; it does not reproduce every interactive user's Mac permissions or window-manager configuration.
+Local Windows 11 validation also finished with 6 passed, 1 quality skip, and no failures or XFAIL. The hosted macOS job executed `npm run test:headed`: the browser granted real fullscreen, enter/exit assertions passed, and quality switching passed. The predicted fullscreen denial was not reproduced there; this does not establish compatibility with every interactive Mac's permissions or window-manager configuration. A genuine browser rejection is reported as a skip after checking that the Enter button remains and playback continues.
 
-Quality options are recorded with the video URL and user agent. Local observations showed one 1080p option; the candidate reported options up to 4096p on a Mac. The cause is unconfirmed: neither subscription status nor OS alone is established as the explanation. Compare quality attachments across jobs. Missing alternatives are test-data prerequisites and are skipped, never classified as a product bug.
+For the same free video (`72jjd1`), all three headless jobs exposed only 1080p; headed macOS exposed 1080p, 2160p, 2880p, 3840p, and 4096p. Their desktop user-agent strings were identical. The difference therefore correlates with browser mode, not simply OS or subscription status. Playwright uses separate Chromium builds for [default headless and headed operation](https://playwright.dev/docs/browsers#chromium-headless-shell); the exact codec or site-side selection mechanism is unconfirmed. Quality attachments preserve the URL, options, and user agent. Missing alternatives are skipped as unmet test-data prerequisites, never XFAIL.
 
-Earlier Windows logs showed target seek positions but no advancing clock and no Pause control. They establish a failure, not its cause: buffering, decoding, and player state require trace evidence. The revised test gives buffering more time and preserves assertions on every platform. No product defect is declared or suppressed without a reproducible diagnosis and issue reference.
+Earlier Windows failures showed a reached seek target followed by a stalled clock. With the same 60-second recovery allowance on every OS, both seek tests passed in all four jobs without pressing Play. This is consistent with a transient stall but does not prove buffering was its cause. There is no Windows exception or suppressed product defect; a stall beyond the allowance fails and retains diagnostics.
 
 ## AI workflow
 
