@@ -91,7 +91,7 @@ test.describe('DeoVR public video playback', () => {
 
       // The UI clock has one-second precision; wait through one tick to prove it stays paused.
       await page.waitForTimeout(1_200);
-      expect((await getPlayerTimes(page)).current).toBeLessThanOrEqual(pausedAt + 1);
+      expect(Math.abs((await getPlayerTimes(page)).current - pausedAt)).toBeLessThanOrEqual(1);
       await revealPlayerControls(page);
     });
 
@@ -148,6 +148,8 @@ test.describe('DeoVR public video playback', () => {
 
   test('changes quality without resetting position or stopping playback', async ({ page }, testInfo) => {
     await test.step('Change quality and verify selection, position, and continued playback', async () => {
+      // Keep the baseline beyond the two-second tolerance for detecting a reset.
+      await waitForClockToAdvance(page, 5);
       const beforeQualityChange = (await getPlayerTimes(page)).current;
       const changeStarted = Date.now();
       const qualityOptions = await openQualityMenu(page);
@@ -185,6 +187,8 @@ test.describe('DeoVR public video playback', () => {
 
   test('fullscreen controls reflect the browser outcome and playback continues', async ({ page }, testInfo) => {
     test.skip(!await page.evaluate(() => document.fullscreenEnabled), 'Browser does not support or permit fullscreen.');
+    // Keep the baseline beyond the two-second tolerance for detecting a reset.
+    await waitForClockToAdvance(page, 5);
     await revealPlayerControls(page);
     const before = (await getPlayerTimes(page)).current;
     const started = Date.now();
