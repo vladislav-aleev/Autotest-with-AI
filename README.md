@@ -2,126 +2,69 @@
 
 [![Playwright E2E](https://github.com/vladislav-aleev/Autotest-with-AI/actions/workflows/playwright.yml/badge.svg)](https://github.com/vladislav-aleev/Autotest-with-AI/actions/workflows/playwright.yml)
 
-This project tests the public video-viewing journey on DeoVR with Playwright Test.
+**Green CI means no unexpected failures, not complete coverage. Quality and fullscreen can be skipped for unmet prerequisites. The revised suite contains no XFAIL rules.** Each job publishes actual passed / failed / skipped / XFAIL counts and reasons in its summary and `reports/summary.json` artifact.
 
-## User Path
+## User path and rationale
 
-**Open the DeoVR homepage → search for “Hanoi Train Street” → choose a result without a Premium marker → open the video → start playback → pause and resume → seek → change quality → enter and exit fullscreen → verify playback continues.**
+[DeoVR homepage](https://deovr.com/) → search for “Hanoi Train Street” → choose the first result without a Premium marker → verify its URL and heading → play → exercise player controls.
 
-The test starts at [https://deovr.com/](https://deovr.com/) and selects a video through the site's own search. It does not store a video URL in the test. The first result without a Premium marker is used; the test verifies that result before opening it and confirms the video page is playable without signing in.
+This works without login or a Premium subscription, covers the main player functions, and tests a fundamental reason to visit DeoVR. Poor playback can discourage registration and subscription purchases.
 
-I chose this path because:
+## Run
 
-1. It works without login or a Premium subscription.
-2. It allows checking the main video player functions.
-3. Watching videos is one of the most fundamental functions on the site. If playback doesn't work well, users won't sign up or purchase a subscription.
-
-## Preconditions
-
-- The public DeoVR homepage and video CDN are reachable.
-- Search returns at least one video that is not marked as Premium.
-- Playback is available without signing in.
-- For the quality-change test, the selected free video must expose at least two quality renditions.
-
-## Test Scenarios
-
-Each desktop player test independently searches from the homepage, opens the first non-Premium result, and starts playback. This keeps failures isolated and makes the search-to-watch path part of every player test. The Pixel 7 project runs a separate mobile smoke test for the same search-to-playback journey.
-
-| Test | Steps | Expected result |
-| --- | --- | --- |
-| Find and start a public video | Search from the homepage; choose the first result without a Premium marker; open it; start playback. | The search result has no Premium marker, its video page opens, the title matches, and the playback clock advances without login. |
-| Pause and resume | Pause; wait through one displayed clock tick; resume. | The play control appears while paused and the clock stays still within its one-second display precision. After resuming, the pause control appears and the clock advances. |
-| Seek forward | Seek to approximately 72% of the timeline. | The displayed position lands within ±5% of the target and playback remains active without pressing Play again. |
-| Seek backward | Seek to approximately 72%, then to 24%. | The displayed position lands within ±5% of the backward target and playback remains active without pressing Play again. |
-| Change quality | Open quality settings and select a different rendition. | At least two options are required. The newly selected option is marked selected, playback does not reset to the beginning or pause, and the clock advances. If only one option is available, Playwright reports an explicit expected failure (XFAIL), not a passing test. |
-| Fullscreen | Click Enter Fullscreen, then Exit Fullscreen. | The control changes to Exit Fullscreen and back to Enter Fullscreen. Playback position is preserved, the pause control remains active, and the clock advances from the time captured immediately after exiting. Real browser fullscreen is checked only when granted; unsupported or denied transitions are recorded as a test annotation. |
-
-## Reliability and Coverage
-
-- The scenarios are separate Playwright tests with shared `beforeEach` setup and named `test.step` entries.
-- The player renders into a canvas, so the test reads the visible playback clock rather than relying on `HTMLVideoElement.currentTime`.
-- The time parser supports both `mm:ss` and `hh:mm:ss` and rejects malformed or out-of-range values.
-- Timeline targets use a ±5% tolerance. The test never presses Play automatically after a seek; an unexpected pause is reported as a failure. On Windows CI, an observed Play state after seeking is reported as XFAIL until the DeoVR behavior changes; if neither Play nor Pause is visible, the test still fails normally.
-- Quality options are located inside the quality menu. The test does not pass when no alternative rendition exists.
-- Fullscreen UI state is required on all platforms. The browser's real fullscreen API is recorded separately because a browser or operating system may deny the request.
-- The full player-control suite runs in desktop Chromium. Pixel 7 emulation checks the mobile search-to-playback smoke path; mobile player controls use a different layout and are not represented as covered by the desktop-control tests. GitHub Actions runs both projects on Windows, macOS, and Linux.
-
-## Requirements
-
-- Node.js 22, 24, or 26 (see [Playwright system requirements](https://playwright.dev/docs/intro#system-requirements))
-- npm
-- Internet access to DeoVR and its video CDN
-
-## Install
+Use Node.js 24 and npm:
 
 ```bash
 npm ci
 npx playwright install chromium
-```
-
-## Run
-
-Run the desktop player scenarios and Pixel 7 mobile smoke test:
-
-```bash
 npm test
-```
-
-Run only one project:
-
-```bash
-npx playwright test --project="Desktop Chrome"
-npx playwright test --project="Pixel 7"
-```
-
-Run with a visible browser:
-
-```bash
 npm run test:headed
+npm run report
 ```
 
-Open Playwright's interactive runner:
+Linux CI installs system dependencies with `npx playwright install --with-deps chromium`. For one project use `npx playwright test --project="Desktop Chrome"` or `--project="Pixel 7"`.
 
-```bash
-npm run test:ui
-```
+## Scenarios
 
-The HTML report is written to `playwright-report/`. Open it with `npm run report`. Traces, screenshots, and video recordings are retained under `test-results/` when a test fails.
+Preconditions: DeoVR/search/CDN are reachable; search returns a free, playable video. Each test starts in a fresh context and independently searches. Mobile coverage is a search-to-playback smoke test; the six player scenarios run on desktop Chromium.
 
-## CI and Tested Operating System
+| Scenario | Actions | Expected result |
+| --- | --- | --- |
+| Search and play | Search, open a result without a Premium marker, press Play | Result URL and video heading match; the clock advances without login. |
+| Pause / resume | Pause, observe for 1.2 seconds, resume | Play/Pause titles reflect state; paused time stays within one displayed tick; resumed time advances. |
+| Seek forward | Click 72% of the timeline | Position is within ±5% of total duration around the target; playback resumes autonomously within 60 seconds. |
+| Seek backward | Click 72%, then 24% | Both positions meet the tolerance; playback resumes autonomously within 60 seconds. |
+| Quality | Select another rendition, reopen settings, check selection, close menu | Selection changes; position stays within elapsed time and rounding tolerance; playback continues. Skip if fewer than two options exist. |
+| Fullscreen | Request fullscreen, inspect native promise outcome, exit when granted | Granted: actual fullscreen and button state agree; exit preserves position and playback. Denied: Enter Fullscreen remains and playback advances; the unavailable transition is skipped with the browser's reason. |
 
-The [GitHub Actions workflow](.github/workflows/playwright.yml) runs on `windows-latest`, `macos-latest`, and `ubuntu-latest`. The project was run locally on Windows 11 with Playwright 1.65.0 and Chromium. The GitHub Actions matrix is configured for macOS and Linux; those hosted-runner results should be checked in the workflow before claiming they were verified.
+Shared search and validated `mm:ss` / `hh:mm:ss` parsing live in `tests/helpers.js`. Seek recovery never presses Play. Failures retain traces, screenshots, video, and a player-state snapshot. Buffering has a bounded 60-second allowance on every OS; a longer stall remains a failure. Tests have a 180-second budget and no retries.
 
-The live search currently returns a free video with only one `1080p` rendition in this environment. The desktop quality scenario reports an explicit expected failure (XFAIL) in that situation instead of reporting a false pass; this does not turn the missing quality option into a pass. Use a free video with multiple renditions to exercise the quality-change assertions. The mobile smoke test passed on the local Windows 11 run; the full mobile player-control suite is not claimed as covered.
+## Verified environments and limitations
 
-## AI Workflow
+The previous [CI run](https://github.com/vladislav-aleev/Autotest-with-AI/actions/runs/42435526512) succeeded on Windows, macOS, and Ubuntu but allowed XFAIL. Job status alone does not reveal its exact pass/XFAIL counts; those counts are not reconstructed as evidence.
 
-**Tool used:** OpenAI Codex in the Codex desktop app. Playwright Test was used for the browser automation.
+| Current revision | Passed | Failed | Skipped | XFAIL |
+| --- | --- | --- | --- | --- |
+| Windows CI, headless | Pending | — | — | 0 by design |
+| macOS CI, headless | Pending | — | — | 0 by design |
+| Ubuntu CI, headless | Pending | — | — | 0 by design |
+| macOS CI, headed | Pending | — | — | 0 by design |
 
-**Key prompts:**
+Local runs use Windows 11. The additional macOS job executes `npm run test:headed` on a hosted Mac; it does not reproduce every interactive user's Mac permissions or window-manager configuration.
 
-1. “Read this DeoVR take-home assignment and recommend the end-to-end flow that would best demonstrate my QA skills. Explain why you chose it.”
-2. “Write a stable end-to-end autotest using Playwright for this checklist. Set up the complete project and add README instructions for installing dependencies and running the test.”
-3. “Replace the hard-coded video URL with a search flow. Start at https://deovr.com/, search for a video that is not Premium, verify that the result opens the video page and is not Premium, and then run the player checks.”
-4. “Review the test as a picky QA engineer. Check whether each assertion proves the expected behavior, and identify logical errors, fragile locators, unreliable waits, missing scenario details, and mismatches between the test and README.”
-5. “Fix the issues found in review: capture a fresh playback-time baseline immediately after exiting fullscreen; do not press Play after seeking, so a pause-after-seek defect remains visible; parse both mm:ss and hh:mm:ss; assert seek positions within ±5% of the target; require an alternate quality and report an explicit expected failure when only one is available; scope quality locators to the menu and close it with its control, then assert it is closed. Split the suite into independent tests with named steps, add a Pixel 7 mobile smoke test, and keep the README accurate.”
-6. “Make fullscreen coverage portable across visible Playwright Chromium on Windows, macOS, and Linux. Always assert that the control changes from Enter Fullscreen to Exit Fullscreen and back. Check the real browser fullscreen state only when the browser grants it, and add an explicit annotation when it is unsupported or denied. Add a GitHub Actions matrix for all three operating systems and document which OS was tested locally.”
+Quality options are recorded with the video URL and user agent. Local observations showed one 1080p option; the candidate reported options up to 4096p on a Mac. The cause is unconfirmed: neither subscription status nor OS alone is established as the explanation. Compare quality attachments across jobs. Missing alternatives are test-data prerequisites and are skipped, never classified as a product bug.
 
-**What the AI did well:** Codex inspected the live DeoVR page, found that the player uses a canvas instead of a native video element, and identified the visible clock and player test IDs. It generated the Playwright project, ran it against the real site, and used failure output to adjust the search and player interactions.
+Earlier Windows logs showed target seek positions but no advancing clock and no Pause control. They establish a failure, not its cause: buffering, decoding, and player state require trace evidence. The revised test gives buffering more time and preserves assertions on every platform. No product defect is declared or suppressed without a reproducible diagnosis and issue reference.
 
-**What I caught and had corrected during review:**
+## AI workflow
 
-- The final playback assertion reused a timestamp captured before quality and fullscreen actions. I required a new baseline immediately after fullscreen exit and an assertion that the clock advances from it.
-- The test pressed Play after seeking, which could hide a pause-after-seek defect. I removed that recovery action and made continued playback an assertion.
-- The desktop Play/Pause locator matched the control regardless of its state, so a visibility check could not prove playback was active. I changed it to require the button title `Pause` and kept the playback-clock assertion.
-- The new Windows CI log showed that the Pause control was absent after both seek operations. I made the test distinguish an explicit Play state from a missing control, so a confirmed pause is reported as XFAIL on that runner while an unknown control state remains a failure.
-- The time parser treated a value such as `1:02:03` as 62 seconds. I required support for both `mm:ss` and `hh:mm:ss` and validation of the displayed duration.
-- The seek check accepted positions far from the target. I replaced it with an absolute ±5% tolerance.
-- The quality step could pass without changing quality, and its locators were too broad. I made an alternate rendition mandatory, report XFAIL when only one is available, and scoped the selector to the quality menu.
-- The test swallowed Escape errors even though Escape did not reliably close the menu. I changed it to close the menu with its control and verify that it disappears.
-- The original suite grouped too many actions together, and the README claimed a page-title check while the code checked the heading. I split the checks into independent tests with named steps and aligned the documentation with the actual assertion.
-- Fullscreen behavior depends on browser and operating-system support. I made the UI state change mandatory, while recording whether the browser granted real fullscreen.
+Codex generated and revised the project. The candidate supplied the scenario, reviewed assertions and CI logs, and challenged misleading green results. Additional review was supplied in the conversation; the identity of a second AI tool was not provided, so this project does not claim a verified run with that tool or manual authorship of AI-written patches.
 
-I checked the revised assertions against DeoVR and used the Playwright reports and traces to investigate failures.
+Key prompts:
 
-**Known live-site result:** The current free search result exposes only one quality, so the quality scenario is reported as an expected failure (XFAIL). The Windows GitHub Actions log shows that both seek positions reach their targets, but the Pause control is absent afterward. When the Play control is visible, the seek scenario is reported as XFAIL on that runner; a missing Play and Pause control remains an unexpected failure. This keeps the observed player behavior visible in the report without disguising it as a passing playback check.
+- “Write a stable end-to-end autotest using Playwright for this checklist. Include the complete project setup and instructions in the README for running it.”
+- “Start from the homepage, find a video through search, verify the video page opens and that it is not Premium, then continue with the remaining checks.”
+- “Do not press Play after seeking. Capture a fresh timestamp after fullscreen exit, validate hh:mm:ss, and check seek positions within ±5%.”
+- “Remove runner-specific XFAIL rules, share helpers, use skip for missing quality prerequisites, and verify fullscreen with a headed macOS run.”
+
+AI helped inspect controls, generate fixtures and interpret output. Review caught a stale final timestamp, automatic Play recovery that hid failures, an invalid parser, a Play/Pause locator that ignored state, broad quality selectors, swallowed Escape errors, and unjustified Windows XFAIL logic. These were corrected in code. The earlier claim that an absent Pause button proved a product bug was withdrawn; the cause remains under investigation.

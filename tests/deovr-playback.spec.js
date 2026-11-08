@@ -1,80 +1,26 @@
 import { expect, test } from '@playwright/test';
-
-const HOME_URL = 'https://deovr.com/';
-const SEARCH_TERM = 'Hanoi Train Street';
-const PLAYER_OVERLAY = '[data-testid="player-overlay"]';
-const TIMELINE = '[data-testid="timeline"]';
-const SEARCH_RESULTS = 'main article';
-
-function parseMediaTime(value) {
-  const parts = value.trim().split(':');
-  if (parts.length !== 2 && parts.length !== 3) {
-    throw new Error(`Expected a media time in mm:ss or hh:mm:ss format, received: "${value}"`);
-  }
-
-  const numbers = parts.map((part) => {
-    if (!/^\d+$/.test(part)) {
-      throw new Error(`Media time contains a non-numeric component: "${value}"`);
-    }
-    return Number(part);
-  });
-
-  const seconds = numbers.at(-1);
-  if (seconds >= 60 || (numbers.length === 3 && numbers[1] >= 60)) {
-    throw new Error(`Media time contains an out-of-range component: "${value}"`);
-  }
-
-  return numbers.reduce((total, component) => total * 60 + component, 0);
-}
-
-async function getPlayerTimes(page) {
-  const timeParts = page.getByTestId('bottom-controls').locator('p span');
-  await expect(timeParts).toHaveCount(2);
-  const [currentText, durationText] = await timeParts.allTextContents();
-  const current = parseMediaTime(currentText);
-  const duration = parseMediaTime(durationText);
-  expect(duration, 'The video duration must be greater than zero').toBeGreaterThan(0);
-  return { current, duration };
-}
-
-async function waitForClockToAdvance(page, previousTime) {
-  await expect.poll(async () => (await getPlayerTimes(page)).current, { timeout: 20_000 })
-    .toBeGreaterThan(previousTime);
-}
+import { searchPublicVideo, getPlayerTimes, waitForClockToAdvance, observeFullscreen } from './helpers.js';
 
 async function verifyPlaybackContinuesAfterSeek(page, testInfo) {
   const { current } = await getPlayerTimes(page);
   await revealPlayerControls(page, testInfo);
 
-  const pauseControl = getPlayPauseControl(page, 'pause');
-  const playControl = getPlayPauseControl(page, 'play');
-  if (
-    process.env.CI && process.platform === 'win32' &&
-    await playControl.isVisible() && !(await pauseControl.isVisible())
-  ) {
-    test.fail(true, 'DeoVR pauses playback after seeking on the Windows GitHub Actions runner.');
-  }
-
-  await expect(pauseControl).toBeVisible();
-  await waitForClockToAdvance(page, current);
+  // Allow bounded buffering on every platform, without sending Play.
+  await waitForClockToAdvance(page, current, 60_000);
+  await revealPlayerControls(page);
+  await expect(getPlayPauseControl(page, 'pause')).toBeVisible();
 }
 
 function getPlayPauseControl(page, iconName) {
   const title = iconName === 'pause' ? 'Pause' : 'Play';
-  const desktopControl = page.getByTestId('play-pause-btn').and(page.getByTitle(title));
-  const mobileControl = page.locator(`main button:has(svg[name="${iconName}"])`);
-  return desktopControl.or(mobileControl);
+  return page.getByTestId('play-pause-btn').and(page.getByTitle(title, { exact: true }));
 }
 
 async function revealPlayerControls(page, testInfo) {
   const overlay = page.getByTestId('player-overlay');
-  if (testInfo.project.name === 'Pixel 7') {
-    await overlay.tap({ force: true });
-  } else {
-    const box = await overlay.boundingBox();
-    if (!box) throw new Error('The player overlay is not visible');
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  }
+  const box = await overlay.boundingBox();
+  if (!box) throw new Error('The player overlay is not visible');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await expect(overlay).toHaveAttribute('data-ui-hidden', 'false');
 }
 
@@ -90,62 +36,32 @@ async function seekTo(page, testInfo, fraction) {
 async function openQualityMenu(page, testInfo) {
   await revealPlayerControls(page, testInfo);
 
-  const desktopQualityButton = page.getByTestId('quality-btn');
-  if (await desktopQualityButton.count()) {
-    await desktopQualityButton.click();
-  } else {
-    // Mobile layout nests quality selection under the player settings menu.
-    await page.locator(`${PLAYER_OVERLAY} button:has(svg[name="settings"])`).click();
-    await page.getByText('Video quality', { exact: true }).click();
-  }
-
+  await page.getByTestId('quality-btn').click();
   const qualityMenu = page.getByTestId('quality-option').first().locator('xpath=ancestor::section[1]');
   await expect(qualityMenu).toBeVisible();
   return qualityMenu.getByTestId('quality-option');
 }
 
 test.describe('DeoVR public video playback', () => {
+  test.afterEach(async ({ page }, testInfo) => {
+    if (!['failed', 'timedOut'].includes(testInfo.status) || page.isClosed()) return;
+    await testInfo.attach('player-at-failure', {
+      body: JSON.stringify(await page.evaluate(() => ({
+        url: location.href,
+        controlTitle: document.querySelector('[data-testid="play-pause-btn"]')?.getAttribute('title'),
+        clock: document.querySelector('[data-testid="bottom-controls"] p')?.textContent,
+        media: [...document.querySelectorAll('video')].map(v => ({ paused: v.paused, seeking: v.seeking, currentTime: v.currentTime, readyState: v.readyState, networkState: v.networkState, error: v.error?.message })),
+      })), null, 2), contentType: 'application/json',
+    });
+  });
   test.beforeEach(async ({ page }, testInfo) => {
     await test.step('Search for and open a non-Premium video', async () => {
-      await page.goto(HOME_URL, { waitUntil: 'domcontentloaded' });
-      await expect(page.getByRole('heading', { name: 'VR Videos' })).toBeVisible();
-
-      if (testInfo.project.name === 'Pixel 7') {
-        await page.getByRole('button', { name: 'Search', exact: true }).click();
-      }
-      const searchInput = page.getByPlaceholder("I'm looking for...");
-      await searchInput.fill(SEARCH_TERM);
-      await searchInput.press('Enter');
-      await expect(page).toHaveURL(/\/search\?q=/);
-      await expect(page.getByRole('heading', { name: 'Search results' })).toBeVisible();
-
-      const freeResults = page.locator(SEARCH_RESULTS).filter({
-        hasNot: page.locator('a[href*="/videos/premium"]'),
-      });
-      const freeResult = freeResults.first();
-      await expect(freeResult).toBeVisible();
-      await expect(freeResult.locator('a[href*="/videos/premium"]')).toHaveCount(0);
-
-      const videoLink = freeResult.locator('h3 a');
-      const videoHref = await videoLink.getAttribute('href');
-      const videoTitle = await videoLink.innerText();
-      expect(videoHref, 'A non-Premium search result must link to a video page').toBeTruthy();
-      expect(videoTitle.trim()).not.toBe('');
-
-      await videoLink.click();
-      await expect(page).toHaveURL(new URL(videoHref, HOME_URL).href);
-      await expect(page.getByRole('heading', { level: 1 })).toHaveText(videoTitle);
-      testInfo.annotations.push({
-        type: 'selected-video',
-        description: `${videoTitle.trim()} — selected from search results without a Premium marker.`,
-      });
+      await observeFullscreen(page);
+      await searchPublicVideo(page, testInfo);
     });
 
     await test.step('Start playback and confirm the clock advances', async () => {
-      const firstPlayButton = testInfo.project.name === 'Pixel 7'
-        ? page.locator('main button:has(svg[name="play"])').first()
-        : page.getByTestId('first-play-btn');
-      await firstPlayButton.click();
+      await page.getByTestId('first-play-btn').click();
       await expect(getPlayPauseControl(page, 'pause')).toBeVisible();
       await expect(page.getByTestId('bottom-controls')).toBeVisible();
       const { current } = await getPlayerTimes(page);
@@ -233,21 +149,22 @@ test.describe('DeoVR public video playback', () => {
   test('changes quality without resetting position or stopping playback', async ({ page }, testInfo) => {
     await test.step('Require an alternate rendition for this quality-change test', async () => {
       const beforeQualityChange = (await getPlayerTimes(page)).current;
+      const changeStarted = Date.now();
       const qualityOptions = await openQualityMenu(page, testInfo);
       await expect(qualityOptions.first()).toBeVisible();
       const optionCount = await qualityOptions.count();
-      test.fail(
+      await testInfo.attach('quality-options', {
+        body: JSON.stringify({ url: page.url(), options: await qualityOptions.allTextContents(), userAgent: await page.evaluate(() => navigator.userAgent) }, null, 2),
+        contentType: 'application/json',
+      });
+      test.skip(
         optionCount < 2,
         `The selected free video exposes ${optionCount} quality option(s); an alternate rendition is required.`,
       );
-      expect(
-        optionCount,
-        'The selected non-Premium video must expose at least two quality renditions; one option is not a quality-change test.',
-      ).toBeGreaterThan(1);
+
 
       const selectedOption = qualityOptions.filter({ has: page.locator('svg[name="check"]') });
       await expect(selectedOption).toHaveCount(1);
-      const selectedLabel = (await selectedOption.innerText()).trim();
       const alternateOption = qualityOptions.filter({ hasNot: page.locator('svg[name="check"]') }).first();
       const alternateLabel = (await alternateOption.innerText()).trim();
       await alternateOption.getByRole('button').click();
@@ -255,67 +172,47 @@ test.describe('DeoVR public video playback', () => {
       const reopenedOptions = await openQualityMenu(page, testInfo);
       const newSelectedOption = reopenedOptions.filter({ has: page.locator('svg[name="check"]') });
       await expect(newSelectedOption).toHaveText(alternateLabel);
-      expect(alternateLabel).not.toBe(selectedLabel);
 
+      await page.getByTestId('quality-btn').click();
+      await expect(page.getByTestId('quality-option')).toHaveCount(0);
       const afterQualityChange = (await getPlayerTimes(page)).current;
       expect(afterQualityChange).toBeGreaterThanOrEqual(beforeQualityChange - 2);
+      expect(afterQualityChange).toBeLessThanOrEqual(beforeQualityChange + (Date.now() - changeStarted) / 1000 + 2);
       await revealPlayerControls(page, testInfo);
       await expect(getPlayPauseControl(page, 'pause')).toBeVisible();
       await waitForClockToAdvance(page, afterQualityChange);
 
-      // Close the quality menu with its control and assert it is gone; Escape is not reliable here.
-      await openQualityMenu(page, testInfo);
-      if (await page.getByTestId('quality-btn').count()) {
-        await page.getByTestId('quality-btn').click();
-      } else {
-        await page.locator(`${PLAYER_OVERLAY} button:has(svg[name="settings"])`).click();
-      }
-      await expect(page.getByTestId('quality-option')).toBeHidden();
     });
   });
 
-  test('fullscreen controls toggle and playback position continues after exit', async ({ page }, testInfo) => {
-    const fullscreenConsoleMessages = [];
-    let positionBeforeFullscreen;
-    page.on('console', (message) => {
-      if (/fullscreen|not granted/i.test(message.text())) fullscreenConsoleMessages.push(message.text());
-    });
-
-    await test.step('Enter fullscreen and verify the control state', async () => {
-      positionBeforeFullscreen = (await getPlayerTimes(page)).current;
-      await revealPlayerControls(page, testInfo);
-      await page.getByTitle('Enter Fullscreen').click();
-      await expect(page.getByTitle('Exit Fullscreen')).toBeVisible();
-
-      const fullscreenApiEnabled = await page.evaluate(() => document.fullscreenEnabled);
-      const enteredRealFullscreen = await page.evaluate(() => Boolean(document.fullscreenElement));
-      testInfo.annotations.push({
-        type: 'fullscreen-api',
-        description: fullscreenApiEnabled && enteredRealFullscreen
-          ? 'The browser granted the real fullscreen transition.'
-          : `The UI toggled to Exit Fullscreen; real fullscreen was ${fullscreenApiEnabled ? 'not granted by the browser' : 'not supported'}${fullscreenConsoleMessages.length ? ` (${fullscreenConsoleMessages.join('; ')})` : ''}.`,
-      });
-
-      if (fullscreenApiEnabled && enteredRealFullscreen) {
-        expect(enteredRealFullscreen).toBe(true);
-      }
-      expect((await getPlayerTimes(page)).current).toBeGreaterThanOrEqual(positionBeforeFullscreen - 2);
-    });
-
-    await test.step('Exit fullscreen and prove the playback clock advances from the exit point', async () => {
-      const wasActuallyFullscreen = await page.evaluate(() => Boolean(document.fullscreenElement));
-      await revealPlayerControls(page, testInfo);
-      await page.getByTitle('Exit Fullscreen').click();
-      await expect(page.getByTitle('Enter Fullscreen')).toBeVisible();
-      if (wasActuallyFullscreen) {
-        await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(false);
-      }
-
-      const timeImmediatelyAfterExit = (await getPlayerTimes(page)).current;
-      expect(timeImmediatelyAfterExit).toBeGreaterThanOrEqual(positionBeforeFullscreen - 2);
-      await expect(getPlayPauseControl(page, 'pause')).toBeVisible();
-      await waitForClockToAdvance(page, timeImmediatelyAfterExit);
-      expect((await getPlayerTimes(page)).current).toBeGreaterThan(timeImmediatelyAfterExit);
-    });
+  test('fullscreen controls reflect the browser outcome and playback continues', async ({ page }, testInfo) => {
+    test.skip(!await page.evaluate(() => document.fullscreenEnabled), 'Browser does not support or permit fullscreen.');
+    await revealPlayerControls(page);
+    const before = (await getPlayerTimes(page)).current;
+    const started = Date.now();
+    await page.getByTitle('Enter Fullscreen', { exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.__fullscreenAttempt.status), { timeout: 15_000 })
+      .toMatch(/^(granted|denied)$/);
+    const outcome = await page.evaluate(() => window.__fullscreenAttempt);
+    await testInfo.attach('fullscreen-outcome', { body: JSON.stringify(outcome), contentType: 'application/json' });
+    if (outcome.status === 'denied') {
+      await revealPlayerControls(page);
+      await expect(page.getByTitle('Enter Fullscreen', { exact: true })).toBeVisible();
+      expect(await page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+      await waitForClockToAdvance(page, (await getPlayerTimes(page)).current);
+      test.skip(true, 'Browser rejected the real fullscreen request: ' + outcome.error);
+    }
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement !== null)).toBe(true);
+    await revealPlayerControls(page);
+    await expect(page.getByTitle('Exit Fullscreen', { exact: true })).toBeVisible();
+    await page.getByTitle('Exit Fullscreen', { exact: true }).click();
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+    await revealPlayerControls(page);
+    await expect(page.getByTitle('Enter Fullscreen', { exact: true })).toBeVisible();
+    const after = (await getPlayerTimes(page)).current;
+    expect(after).toBeGreaterThanOrEqual(before - 2);
+    expect(after).toBeLessThanOrEqual(before + (Date.now() - started) / 1000 + 2);
+    await expect(getPlayPauseControl(page, 'pause')).toBeVisible();
+    await waitForClockToAdvance(page, after);
   });
 });

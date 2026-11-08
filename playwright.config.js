@@ -6,9 +6,9 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
   workers: 1,
-  timeout: 120_000,
+  timeout: 180_000,
   expect: { timeout: 10_000 },
-  reporter: [['list'], ['html', { open: 'never' }]],
+  reporter: [['list'], ['html', { open: 'never' }], ['./tests/summary-reporter.js'], ...(process.env.CI ? [['github']] : [])],
   use: {
     baseURL: 'https://deovr.com',
     trace: 'retain-on-failure',

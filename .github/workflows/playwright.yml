@@ -10,19 +10,23 @@ permissions:
 
 jobs:
   e2e:
-    name: E2E on ${{ matrix.os }}
+    name: E2E on ${{ matrix.os }} (${{ matrix.mode }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
+        mode: [headless]
+        include:
+          - os: macos-latest
+            mode: headed
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
@@ -39,14 +43,20 @@ jobs:
         run: npx playwright install chromium
 
       - name: Run E2E projects
+        if: matrix.mode == 'headless'
         run: npm test
+
+      - name: Run headed macOS E2E
+        if: matrix.mode == 'headed'
+        run: npm run test:headed
 
       - name: Upload Playwright report and failure artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
-          name: playwright-${{ runner.os }}
+          name: playwright-${{ runner.os }}-${{ matrix.mode }}
           path: |
             playwright-report/
             test-results/
+            reports/
           if-no-files-found: ignore
